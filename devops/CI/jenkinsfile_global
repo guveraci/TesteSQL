@@ -1,0 +1,70 @@
+environment {
+        SONAR_URL 							= "http://localhost:9000"
+        SONAR_ENVIRONMENT 					= 'Sonar_local' // Nombre dado en la configurcion de Jenkins a ese Sonar Server
+        SONAR_TOKEN                         = 'testesql' // Credential ID del token de Sonar generado por equipo QA
+        SONAR_PROJECT_NAME 					= 'Teste_SQL'
+        SONAR_PROJECT_KEY 					= 'Teste_SQL'
+        SONAR_SCANNER                       = 'sonar_scanner'
+}
+
+pipeline {
+    agent any
+
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+    }
+    stages {
+        stage('Pre Build') {
+            steps {
+                echo ' Verificando Enconding..' // VALIDATION
+                sh 'python3 ./devops/encoding-ci.py'
+
+            }
+        }
+    /*stage('SonarQube analysis') {
+        tools {
+            jdk "jdk-17" // the name you have given the JDK installation in Global Tool Configuration
+        }
+        environment {
+            scannerhome =   tool "${SONAR_SCANNER}"
+        }
+        steps {
+            withSonarQubeEnv("${SONAR_ENVIRONMENT}") {// If you have configured more than one global server connection, you can specify its name as configured in Jenkins
+                sh "${scannerhome}/bin/sonar-scanner -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                -Dsonar.projectName=${SONAR_PROJECT_NAME} \
+                -Dsonar.projectVersion=1.0 \
+                -Dsonar.sources=bd/" 
+            }
+
+        }
+    }*/
+        stage('Build') {
+            tools {
+                jdk "jdk-17" // JDK VERSION
+            }
+            steps {
+                echo 'Criando geradores de pacotes..'
+                sh 'pwsh -File ./devops/gera-pacotes.ps1 -DefinitionName GeradorDePacotes' // SCRIPT GERADOR DE PACOTE
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'script/', fingerprint: true // POST DO ARTIFACTS COM OS ARQUIVOS
+                    archiveArtifacts artifacts: 'devops/', fingerprint: true // POST DO ARTIFACTS COM OS ARQUIVOS
+                    archiveArtifacts artifacts: '*.sql', fingerprint: true // POST DO ARTIFACTS COM OS ARQUIVOS         
+              }
+            }
+        }
+        stage('Test') {
+            steps {
+                echo 'Testing..' // SONAR E ETC
+            }
+        }
+        stage('Continuous Deployment') {
+            steps {
+                script {
+                        load 'CD/SGO/jenkinsfile_OwnerTeste'
+                    }
+            }
+        }   
+    }
+}

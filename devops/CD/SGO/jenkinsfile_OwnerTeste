@@ -1,0 +1,125 @@
+
+
+pipeline {
+    agent any
+    
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+    }
+
+    enviroment {
+        ORACLE_HOME = "PATH"
+        PATH = "$ORACLE_HOME/bin:$PATH"
+    }
+
+    parameters {
+        booleanParam(defaultValue: false, description: 'Deploy Dev', name: 'DeployDev')
+        booleanParam(defaultValue: false, description: 'Deploy Hom', name: 'DeployHom')
+        booleanParam(defaultValue: false, description: 'Deploy Prod', name: 'DeployProd')
+    }
+
+    stages {
+        stage('Awaiting Approval') {
+            steps {
+                script {
+                    if (env.BUILD_USER IN ['admin', 'user_teste'])
+                    input message: 'Por favor aprovar o Deploy.', ok: 'Aprovar'
+                } else {
+                    echo 'Você não tem permissão para aprovar o Deploy.'
+                    error('Acesso negado para aprovar o deploy.')
+                }
+            }
+        }
+
+        // stage('Security pre-deploy') {
+        //     steps {
+        //         script{
+        //             secPreDeploy()
+        //         }
+        //         sh 'echo "validação de segurança pré-cd"'
+        //     }
+        // }
+
+        stage('Artifact Directory Validation') {
+            steps {
+                //to do
+            }
+        }
+
+        stage('Base Validation') {
+            steps {
+                //Executar script para validar nome da base
+                sh 'cd ../${BUILD_NUMBER}'
+                sh '&{ORACLE_HOME}/sqlplus admindb/dboracle@localhost:1521 @select_globalname.sql'
+            }
+        }
+
+/*         stage('Generate Backup') {
+            steps {
+                //Instalar Powershell Core no server
+                sh '/usr/bin/pwsh -File ./script_backup.ps1'
+            }
+        }
+
+        stage('Generate artifact from backup') {
+            steps {
+                //Criar o artefato
+                //compactar .zip
+                sh 'zip -r backup.zip /path/backup'
+            }
+        } */
+
+        stage('Deploy') { 
+/*             when {
+                anyOf {
+                    expression {params.DeployDev}
+                    expression {params.DeployHom}
+                    expression {params.DeployProd}
+                }
+            } */
+            steps {
+                //executar chamadores para aplicar os sql
+                sh 'cd ../${BUILD_NUMBER}'
+                sh '&{ORACLE_HOME}/sqlplus admindb/dboracle@localhost:1521 @chamador-*.sql'
+            }
+        }
+
+        stage('Object Validation') {
+            steps {
+                sh '&{ORACLE_HOME}/sqlplus admindb/dboracle@localhost:1521 @script/script.sql'
+            }
+        }
+
+/*         stage('Security post-deploy') {
+            steps {
+                script{
+                    secPostDeploy()
+                }
+                sh 'echo "Validação de segurança pós-CD"'
+            }
+        } */
+
+        stage('Notification') {
+            steps {
+                script {
+                    if (currentBuild.result == null || currentBuild.result == 'SUCCESS') {
+                        emailext (
+                            to: 'hpmsilva@mapfre.com.br',
+                            subject: "Deploy bem sucedido"
+                            body: """<p>Olá,</p><p>O Deploy foi realizado com sucesso no ambiente.</p><p>Atenciosamente,<br>Jenkins</p>""",
+                            mimeType: 'text/html'
+                        )
+                    } else {
+                        emailext (
+                            to: 'hpmsilva@mapfre.com.br',
+                            subject: "Deploy bem sucedido"
+                            body: """<p>Olá,</p><p>Houve falha no Deploy.</p><p>Atenciosamente,<br>Jenkins</p>""",
+                            mimeType: 'text/html'
+                        )
+                    }
+                }
+
+            }
+        }
+    }
+}

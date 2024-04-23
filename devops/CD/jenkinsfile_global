@@ -1,0 +1,130 @@
+/* #!groovy
+@Library(['global-pipeline-library@release/v9.1',
+          'security-library@release/v2.0'])_
+
+import com.mapfre.pod.Container
+import com.mapfre.pod.ContainerType
+import com.mapfre.pod.ContainerTypeCustom
+import com.mapfre.pod.ContainerSize
+
+//NOMBRE DE TU ORGANIZACION
+def DEVOPS_PLATFORM_ORGANIZATION = 'org-mapfrebrasil' */
+
+pipeline {
+/*     agent {
+    kubernetes {
+        yaml getPodTemplate(DEVOPS_PLATFORM_ORGANIZATION,[
+                ['cdk', new ContainerTypeCustom('acrmapfredevops.azurecr.io/mapfre/global/mapfrecdk:1.0.33', 'Always', 'cat'), ContainerSize.LARGE],
+                //['sonar-scanner-cli', ContainerType.SONAR_SCANNER_CLI_STABLE, ContainerSize.SMALL],
+                ['azure-cli', ContainerType.AZURE_CLI_STABLE, ContainerSize.SMALL]
+        ] as Container[], true)
+    }
+} */
+    agent any
+
+    enviroment {
+        ORACLE_HOME = "PATH"
+        PATH = "$ORACLE_HOME/bin:$PATH"
+/*         PACKAGE_NAME= 'bff-pipefy'
+        KEY_VAULT_URL               = 'https://do-pro-e57836-mapbr.vault.azure.net/'
+        KEY_VAULT_CREDENTIAL_ID     = 'd1ab1e7a-f411-48fa-ba8a-cf2dc3a1fd70'
+        VERSION       = "$TAG_NAME"
+        ENVIRONMENT = getDeployEnv(VERSION)
+    } */
+    }
+
+    stages {
+/*         stage('Autorização de Deploy') {
+            steps {
+                input message: 'Aguardando autorização para o inicio do pipeline',
+                    submitter: 'hpmsilva',
+                    submitterParametter: 'AUTHORIZED_USER'
+            }
+        } */
+
+        stage('Validação de segurança Pré-CD') {
+            steps {
+                script{
+                    secPreDeploy()
+                }
+                sh 'echo "validação de segurança pré-cd"'
+            }
+        }
+
+        stage('Download do artefato') {
+            steps {
+                //to do
+                //Baixar artefato do azure devops
+                //plugin ??'Azure Artifect Manager'
+                //??AzureArtifectDownload artifectName: 'name', version: 'latest', feedId: 'id_feed_azure', localDownlaodPath: 'path'
+            }
+        }
+
+        stage('Validando dbname') {
+            steps {
+                //adicionar script para validar nome da base
+                script {
+                    def dbName = sh(script: 'echo "SELECT ora_database_name FROM dual;" | sqlplus -S /nolog', returnStdout: true).trim()
+                    if (dbName != 'nome_esperado'){
+                        error "Nome da base invalido: $dbName"
+                    }
+                }
+            }
+        }
+
+        stage('Backup DB') {
+            steps {
+                //Instalar Powershell Core no server
+                sh '/usr/bin/pwsh -File ./script.ps1'
+            }
+        }
+
+        stage('Gerar artefato do backup') {
+            steps {
+                //Criar o artefato
+                //compactar .zip ???
+                sh 'zip -r backup.zip /path/backup'
+            }
+        }
+
+        stage('Deploy to Oracle DB') { 
+            steps {
+                //executar chamadores para aplicar os sql
+                //plugin SQL*Plus
+                sh 'sqlplus user/pass@host:porta @script.sql'
+            }
+        }
+
+        stage('Validação dos objetos na base') {
+            steps {
+                //script sql para validar objetos
+                script {
+                    def result = sh(script: 'echo "SELECT COUNT(*) FROM user_objects WHERE status != \'VALID\';" | sqlplus -S user/pass@host:porta', returnStdout: true)
+                    if (result != 0) {
+                        error "Objetos invalidos na base"
+                    } else {
+                        echo "Objetos validados"
+                    }
+                }
+            }
+        }
+
+        stage('Validação de segurança pós-CD') {
+            steps {
+                script{
+                    secPostDeploy()
+                }
+                sh 'echo "Validação de segurança pós-CD"'
+            }
+        }
+
+/*         stage('Envio de e-mail com relatório') {
+            steps {
+                //Implementar lógica de envio de e-mail com relatórios das alterações
+                emailext body: 'Relatório do pipeline de CD ASC',
+                        subject: 'Relatório do pipeline de CD ASC',
+                        to: 'devopsteam@mapfre.com.br'
+            }
+        } */
+    }
+}
