@@ -62,7 +62,7 @@ pipeline {
         stage('Continuous Deployment') {
             steps {
                 script {
-                        load 'CD/SGO/jenkinsfile_OwnerTeste'
+                        load 'devops/CD/SGO/jenkinsfile_OwnerTeste'
                     }
             }
         }   
